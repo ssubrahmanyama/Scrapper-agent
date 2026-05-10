@@ -1,0 +1,298 @@
+name: PrivacyShield CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/privacyshield-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/privacyshield-frontend
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ── Security: Dependency vulnerability scan ─────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install safety + bandit
+        run: pip install safety bandit[toml] pip-audit
+
+      - name: Bandit SAST scan (Python)
+        run: |
+          bandit -r backend/app/ -ll -ii \
+            --skip B101,B601 \
+            --format json \
+            --output bandit-report.json || true
+          bandit -r backend/app/ -ll -ii --skip B101,B601
+
+      - name: Safety CVE check
+        run: |
+          cd backend
+          safety check -r requirements.txt --output json > safety-report.json || true
+          safety check -r requirements.txt
+
+      - name: pip-audit
+        run: pip-audit -r backend/requirements.txt
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  # ── Backend: Lint, Type check, Test ─────────────────────────────────────────
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: privacyshield_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/privacyshield_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      SECRET_KEY: test-secret-key-not-for-production-use-only-ci
+      ENVIRONMENT: test
+      GOOGLE_CUSTOM_SEARCH_API_KEY: fake-key
+      GOOGLE_SEARCH_ENGINE_ID: fake-id
+      SENDGRID_API_KEY: fake-key
+      STRIPE_SECRET_KEY: sk_test_fake
+      STRIPE_WEBHOOK_SECRET: whsec_fake
+      STRIPE_PRICE_BASIC: price_fake_basic
+      STRIPE_PRICE_PRO: price_fake_pro
+      STRIPE_PRICE_ENTERPRISE: price_fake_ent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          cd backend
+          ruff check app/ tests/
+
+      - name: Format check (black)
+        run: |
+          cd backend
+          black --check app/ tests/
+
+      - name: Type check (mypy)
+        run: |
+          cd backend
+          mypy app/ --ignore-missing-imports --strict || true
+
+      - name: Run tests with coverage
+        run: |
+          cd backend
+          pytest tests/ -v \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -x
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ── Frontend: Lint, Type check, Build ───────────────────────────────────────
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Type check
+        run: cd frontend && npm run typecheck
+
+      - name: Lint
+        run: cd frontend && npm run lint
+
+      - name: Build (prod)
+        run: cd frontend && npm run build
+        env:
+          VITE_API_URL: https://api.privacyshield.ai/api/v1
+
+  # ── Build and push Docker images ─────────────────────────────────────────────
+  build-images:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [security-scan, backend-ci, frontend-ci]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=https://api.privacyshield.ai/api/v1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Trivy container scan ────────────────────────────────────────────
+      - name: Trivy scan — backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:latest
+          format: sarif
+          output: trivy-backend.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-backend.sarif
+
+  # ── Deploy to Kubernetes (EKS) ───────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://privacyshield.ai
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-deploy
+          aws-region: ap-south-1
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name privacyshield-prod --region ap-south-1
+
+      - name: Deploy manifests
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          kubectl set image deployment/backend backend=ghcr.io/your-org/privacyshield-backend:sha-${IMAGE_TAG} -n privacyshield
+          kubectl set image deployment/worker worker=ghcr.io/your-org/privacyshield-backend:sha-${IMAGE_TAG} -n privacyshield
+          kubectl set image deployment/frontend frontend=ghcr.io/your-org/privacyshield-frontend:${IMAGE_TAG} -n privacyshield
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend -n privacyshield --timeout=300s
+          kubectl rollout status deployment/worker -n privacyshield --timeout=300s
+          kubectl rollout status deployment/frontend -n privacyshield --timeout=120s
+
+      - name: Smoke test
+        run: |
+          sleep 15
+          curl -sf https://api.privacyshield.ai/health | grep '"status":"ok"'
+          echo "✅ Smoke test passed"
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: '{"text":"❌ Production deploy FAILED for ${{ github.sha }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

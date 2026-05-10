@@ -1,0 +1,151 @@
+---
+# ── Namespace ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: privacyshield
+  labels:
+    app.kubernetes.io/name: privacyshield
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# ── ResourceQuota ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: privacyshield-quota
+  namespace: privacyshield
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "50"
+    services: "20"
+    persistentvolumeclaims: "10"
+
+---
+# ── LimitRange (enforce default resource requests) ────────────────────────────
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: privacyshield-limits
+  namespace: privacyshield
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      max:
+        cpu: "4"
+        memory: "8Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+
+---
+# ── NetworkPolicy — default deny all ─────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: privacyshield
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# ── NetworkPolicy — allow API ↔ DB ────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-db
+  namespace: privacyshield
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# ── NetworkPolicy — allow API ↔ Redis ────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-redis
+  namespace: privacyshield
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [backend, worker]
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# ── NetworkPolicy — allow ingress → frontend + backend ───────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress
+  namespace: privacyshield
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [frontend, backend]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+  policyTypes:
+    - Ingress
+
+---
+# ── NetworkPolicy — allow egress for backend (external APIs) ─────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-egress
+  namespace: privacyshield
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [backend, worker]
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443   # HTTPS external APIs
+        - protocol: TCP
+          port: 53    # DNS
+        - protocol: UDP
+          port: 53
+  policyTypes:
+    - Egress

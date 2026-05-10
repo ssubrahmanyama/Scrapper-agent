@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "PrivacyShield Browser Guard",
+  "version": "1.0.0",
+  "description": "Real-time PII exposure alerts and data broker detection while browsing.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://api.privacyshield.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://spokeo.com/*",
+        "https://www.spokeo.com/*",
+        "https://whitepages.com/*",
+        "https://www.whitepages.com/*",
+        "https://radaris.com/*",
+        "https://intelius.com/*",
+        "https://beenverified.com/*",
+        "https://www.beenverified.com/*",
+        "https://peoplefinder.com/*",
+        "https://mylife.com/*",
+        "https://truecaller.com/*",
+        "https://justdial.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';"
+  },
+  "web_accessible_resources": []
+}

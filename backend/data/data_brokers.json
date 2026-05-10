@@ -1,0 +1,126 @@
+[
+  {
+    "name": "Spokeo",
+    "domain": "spokeo.com",
+    "country": "US",
+    "removal_url": "https://www.spokeo.com/optout",
+    "removal_method": "FORM",
+    "processing_days": 2,
+    "notes": "Requires email verification"
+  },
+  {
+    "name": "Whitepages",
+    "domain": "whitepages.com",
+    "country": "US",
+    "removal_url": "https://www.whitepages.com/suppression-requests",
+    "removal_method": "FORM",
+    "processing_days": 5
+  },
+  {
+    "name": "Radaris",
+    "domain": "radaris.com",
+    "country": "US",
+    "removal_url": "https://radaris.com/control/privacy",
+    "removal_method": "FORM",
+    "processing_days": 3
+  },
+  {
+    "name": "Intelius",
+    "domain": "intelius.com",
+    "country": "US",
+    "removal_url": "https://www.intelius.com/opt-out/",
+    "removal_method": "FORM",
+    "processing_days": 5
+  },
+  {
+    "name": "BeenVerified",
+    "domain": "beenverified.com",
+    "country": "US",
+    "removal_url": "https://www.beenverified.com/app/optout/search",
+    "removal_method": "FORM",
+    "processing_days": 3
+  },
+  {
+    "name": "PeopleFinder",
+    "domain": "peoplefinder.com",
+    "country": "US",
+    "removal_url": "https://www.peoplefinder.com/optout.php",
+    "removal_method": "FORM",
+    "processing_days": 7
+  },
+  {
+    "name": "MyLife",
+    "domain": "mylife.com",
+    "country": "US",
+    "removal_url": "https://www.mylife.com/privacy/privacy-policy#optout",
+    "removal_method": "EMAIL",
+    "email": "privacy@mylife.com",
+    "processing_days": 14
+  },
+  {
+    "name": "ZoomInfo",
+    "domain": "zoominfo.com",
+    "country": "US",
+    "removal_url": "https://www.zoominfo.com/about/privacy/privacy-choice",
+    "removal_method": "FORM",
+    "processing_days": 10
+  },
+  {
+    "name": "Truecaller",
+    "domain": "truecaller.com",
+    "country": "IN",
+    "removal_url": "https://www.truecaller.com/unlisting",
+    "removal_method": "API",
+    "processing_days": 1,
+    "notes": "Phone number unlisting via API"
+  },
+  {
+    "name": "JustDial",
+    "domain": "justdial.com",
+    "country": "IN",
+    "removal_url": "https://www.justdial.com/customer-care",
+    "removal_method": "MANUAL",
+    "processing_days": 21
+  },
+  {
+    "name": "IndiaMART",
+    "domain": "indiamart.com",
+    "country": "IN",
+    "removal_url": "https://seller.indiamart.com/messagecentre/",
+    "removal_method": "EMAIL",
+    "email": "support@indiamart.com",
+    "processing_days": 14
+  },
+  {
+    "name": "Pipl",
+    "domain": "pipl.com",
+    "country": "US",
+    "removal_url": "https://pipl.com/personal-information-removal-request",
+    "removal_method": "FORM",
+    "processing_days": 30
+  },
+  {
+    "name": "FastPeopleSearch",
+    "domain": "fastpeoplesearch.com",
+    "country": "US",
+    "removal_url": "https://www.fastpeoplesearch.com/removal",
+    "removal_method": "FORM",
+    "processing_days": 3
+  },
+  {
+    "name": "TruePeopleSearch",
+    "domain": "truepeoplesearch.com",
+    "country": "US",
+    "removal_url": "https://www.truepeoplesearch.com/removal",
+    "removal_method": "FORM",
+    "processing_days": 3
+  },
+  {
+    "name": "Addresses.com",
+    "domain": "addresses.com",
+    "country": "US",
+    "removal_url": "https://www.addresses.com/optout.php",
+    "removal_method": "FORM",
+    "processing_days": 7
+  }
+]

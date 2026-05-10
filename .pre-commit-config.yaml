@@ -1,0 +1,57 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+      - id: detect-private-key      # Block accidental key commits
+      - id: detect-aws-credentials  # Block AWS key commits
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  # Python: Ruff linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.7
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Python: Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^backend/app/
+        args: ["--ignore-missing-imports"]
+
+  # Python: Security linting (Bandit)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: ["-ll", "--skip", "B101,B601"]
+        files: ^backend/app/
+
+  # Node: ESLint
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: ESLint (Frontend)
+        language: node
+        entry: sh -c "cd frontend && npm run lint"
+        files: ^frontend/src/
+        pass_filenames: false
+
+  # Secrets scanning with gitleaks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.3
+    hooks:
+      - id: gitleaks
