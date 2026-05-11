@@ -1,5 +1,6 @@
 """config.py — All settings via env / Vault. Zero proprietary SDKs."""
 from __future__ import annotations
+import json
 import secrets
 from typing import Any, List, Optional
 from pydantic import AnyHttpUrl, EmailStr, PostgresDsn, RedisDsn, field_validator
@@ -21,9 +22,12 @@ class Settings(BaseSettings):
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors(cls, v: Any) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+    def parse_cors(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                return json.loads(v)
+            return [i.strip() for i in v.split(",") if i.strip()]
         return v
 
     DATABASE_URL: PostgresDsn

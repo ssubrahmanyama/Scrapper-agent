@@ -10,17 +10,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies into /build/venv
+# Install Python dependencies into /venv
 COPY requirements.txt .
-RUN python -m venv /build/venv \
-    && /build/venv/bin/pip install --upgrade pip \
-    && /build/venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN python -m venv /venv \
+    && /venv/bin/pip install --upgrade pip \
+    && grep -v '^torch==' requirements.txt > /tmp/requirements-no-torch.txt \
+    && /venv/bin/pip install --no-cache-dir -r /tmp/requirements-no-torch.txt \
+    && /venv/bin/pip install --no-cache-dir torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
 
 # Download spaCy model using direct pip install with explicit version URLs
 # spacy 3.7.4 requires model version 3.7.x
-RUN /build/venv/bin/pip install --no-cache-dir \
+RUN /venv/bin/pip install --no-cache-dir \
     https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl || \
-    echo "spaCy model download failed — will be downloaded at runtime via: python -m spacy download en_core_web_sm" 
+    echo "spaCy model download failed — will be downloaded at runtime via: python -m spacy download en_core_web_sm"
 
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 2 — Runtime (minimal attack surface)
@@ -40,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy venv from builder
-COPY --from=builder /build/venv /venv
+COPY --from=builder /venv /venv
 
 # Copy application source
 COPY --chown=appuser:appuser . /app

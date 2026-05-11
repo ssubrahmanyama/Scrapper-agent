@@ -95,9 +95,10 @@ services:
       MYSQL_ROOT_PASSWORD: killbillroot
     volumes: [killbill_db_data:/var/lib/mysql]
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-u", "root", "-pkillbillroot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
-      retries: 10
+      timeout: 5s
+      retries: 5
 
   killbill:
     image: killbill/killbill:0.24.10  # Apache-2.0 — OSS billing
@@ -126,7 +127,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    restart: unless-stopped
+    image: scrapper-agent-backend
+    restart: on-failure
     env_file: ./backend/.env
     environment:
       ENVIRONMENT: development
@@ -143,6 +145,7 @@ services:
       MINIO_SECRET_KEY: minioadmin
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-root-token
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000","http://localhost:8000"]'
     ports: ["8000:8000"]
     depends_on:
       postgres:
@@ -150,16 +153,22 @@ services:
       redis:
         condition: service_healthy
     volumes: [./backend:/app]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      sh -c "/venv/bin/alembic upgrade head &&
+             /venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    restart: unless-stopped
+    image: scrapper-agent-backend
+    restart: on-failure
     env_file: ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://privacyshield:devpassword@postgres:5432/privacyshield
@@ -172,13 +181,14 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000","http://localhost:8000"]'
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes: [./backend:/app]
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    command: /venv/bin/celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 
   flower:
     image: mher/flower:2.0
